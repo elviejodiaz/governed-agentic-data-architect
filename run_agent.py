@@ -37,6 +37,19 @@ PATTERNS_DIR = Path("solution_patterns")
 CORE_ORCHESTRATOR = CONFIG_DIR / "core_orchestrator.md"
 ASSET_NOMENCLATURE = POLICY_DIR / "asset_nomenclature.md"
 
+# ============================================================================
+# Dynamic Multi-Template & Blueprint Mapping Matrix
+# ============================================================================
+TEMPLATE_DIR = Path("prompt_templates")
+
+# New Map linking your target code language to its custom .txt template file
+PROMPT_TEMPLATE_MAP = {
+    "python": TEMPLATE_DIR / "template_pyspark_notebook.txt",
+    "pyspark": TEMPLATE_DIR / "template_pyspark_notebook.txt",
+    "sql": TEMPLATE_DIR / "template_sql_ddl.txt",
+    "adf": TEMPLATE_DIR / "template_data_factory.txt"
+}
+
 # Language-specific guidelines
 GUIDELINES_MAP = {
     "python": POLICY_DIR / "programming_python.md",
@@ -198,18 +211,30 @@ def execute_agent_run(
     try:
         # Initialize Gemini Client (Requires GEMINI_API_KEY env variable)
         client = genai.Client()
+                # Determine specific prompt template and governance paths
         target_key = target_type.lower()
+        template_path = PROMPT_TEMPLATE_MAP.get(target_key, TEMPLATE_DIR / "template_pyspark_notebook.txt")
+        guideline_path = GUIDELINES_MAP.get(target_key, POLICY_DIR / "programming_python.md")
+        blueprint_path = PLATFORM_MAP.get(target_key, BLUEPRINTS_DIR / "catalog_topology.md")
         
-        # 1. Gather Governance Payloads
+        # Ingest the clean contexts
         orchestrator_ctx = load_context(CORE_ORCHESTRATOR)
         nomenclature_ctx = load_context(ASSET_NOMENCLATURE)
-        language_ctx = load_context(GUIDELINES_MAP.get(target_key, POLICY_DIR / "programming_python.md"))
-        blueprint_ctx = load_context(PLATFORM_MAP.get(target_key, BLUEPRINTS_DIR / "catalog_topology.md"))
+        language_ctx = load_context(guideline_path)
+        blueprint_ctx = load_context(blueprint_path)
         
-        # 2. Build Policy System Instruction
-        system_instruction = build_system_instruction(
-            orchestrator_ctx, nomenclature_ctx, language_ctx, blueprint_ctx
-        )
+        # Load the newly specialized prompt template file
+        raw_prompt_template = load_context(template_path)
+        
+        # Inject the active policy variables directly into the template slots
+        system_instruction = raw_prompt_template.replace("{{orchestrator_context}}", orchestrator_ctx) \
+                                               .replace("{{nomenclature_context}}", nomenclature_ctx) \
+                                               .replace("{{language_guidelines}}", language_ctx) \
+                                               .replace("{{platform_blueprints}}", blueprint_ctx) \
+                                               .replace("{{target_type}}", target_type) \
+                                               .replace("{{artifact_name}}", artifact_name if artifact_name else "generated_code") \
+                                               .replace("{{user_query}}", user_query)
+
         
         if not artifact_name:
             artifact_name = f"generated_code_{target_key}"
