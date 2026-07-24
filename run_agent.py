@@ -194,7 +194,7 @@ def automate_git_push(file_path: Path, artifact_name: str):
         print(f"[GIT SUCCESS] Feature branch successfully pushed to downstream origin: {branch_name}")
         
         # Switch back to master safely to leave repo clean
-        repo.heads.main.checkout()
+        repo.heads["main"].checkout()
         
     except Exception as git_err:
         print(f"[GIT ERROR] Failed to push to downstream repo: {str(git_err)}")
